@@ -967,6 +967,22 @@ class GameSession {
         this.playerUsernames.clear();
         this.playerNicknames.clear();
     }
+
+    /**
+     * Get the current game state string
+     * @returns {string}
+     */
+    getGameState() {
+        return this.gameState;
+    }
+
+    /**
+     * Get all player IDs (Set)
+     * @returns {Set<string>}
+     */
+    getPlayers() {
+        return new Set(this.players);
+    }
 }
 
 module.exports = GameSession;

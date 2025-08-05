@@ -39,10 +39,20 @@ module.exports = {
                     flags: 64 // Ephemeral
                 });
             }
-            
+
+            // Get game state before ending
+            const gameState = typeof gameSession.getGameState === 'function'
+                ? gameSession.getGameState()
+                : (gameSession.gameState || 'unknown');
+
             // End the game as a draw
             const drawResult = gameSession.endGameAsDraw();
-            
+
+            // Clean up resources before deleting session
+            if (typeof gameSession.cleanup === 'function') {
+                gameSession.cleanup();
+            }
+
             // Remove the session from active sessions
             activeSessions.delete(channelId);
             
@@ -64,15 +74,17 @@ module.exports = {
             
             // Get all players and their roles for final display
             let rolesEmbed;
-            const gameState = gameSession.getGameState();
-
             if (gameState === 'waiting') {
                 // Game was in signup stage - show players without roles
-                const players = Array.from(gameSession.getPlayers());
+                const players = typeof gameSession.getPlayers === 'function'
+                    ? Array.from(gameSession.getPlayers())
+                    : (Array.from(gameSession.players || []));
                 let playersText = '';
 
                 for (const userId of players) {
-                    const nickname = gameSession.getPlayerNickname(userId);
+                    const nickname = typeof gameSession.getPlayerNickname === 'function'
+                        ? gameSession.getPlayerNickname(userId)
+                        : userId;
                     playersText += `👤 ${nickname}\n`;
                 }
 
@@ -83,14 +95,16 @@ module.exports = {
                     .setTimestamp();
             } else {
                 // Game was in progress - show roles
-                const allPlayers = gameSession.getAllPlayersWithRoles();
+                const allPlayers = typeof gameSession.getAllPlayersWithRoles === 'function'
+                    ? gameSession.getAllPlayersWithRoles()
+                    : [];
                 let rolesText = '';
 
-                for (const [userId, playerData] of allPlayers) {
-                    const nickname = gameSession.getPlayerNickname(userId);
-                    const roleAssignment = gameSession.getPlayerRole(userId);
+                for (const player of allPlayers) {
+                    const nickname = player.username || player.id;
+                    const roleAssignment = player;
                     const roleIcon = getRoleIcon(roleAssignment?.role);
-                    const statusIcon = playerData.alive ? '💚' : '💀';
+                    const statusIcon = player.isAlive ? '💚' : '💀';
 
                     rolesText += `${statusIcon} ${nickname} - ${roleIcon} ${roleAssignment?.role || 'Unknown'}\n`;
                 }
