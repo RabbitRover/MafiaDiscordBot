@@ -1,3 +1,7 @@
+const config = require('./config');
+const logger = require('../utils/logger');
+const ErrorHandler = require('../utils/errorHandler');
+
 class GameSession {
     constructor(hostId, channelId) {
         this.hostId = hostId;
@@ -5,7 +9,7 @@ class GameSession {
         this.players = new Set(); // Use Set to prevent duplicate players
         this.playerUsernames = new Map(); // Store player usernames: playerId -> username
         this.playerNicknames = new Map(); // Store player server nicknames: playerId -> nickname
-        this.maxPlayers = 5;
+        this.maxPlayers = config.MAX_PLAYERS;
         this.gameState = 'waiting'; // waiting, ready, started, roles_assigned, day_phase, night_phase, game_ended
         this.createdAt = new Date();
         this.roleAssignments = {}; // Store role assignments: { playerId: { role, roleInfo, targetRole?, targetRoleInfo? } }
@@ -39,6 +43,17 @@ class GameSession {
      * @returns {Promise<boolean>} - True if player was added, false if already in game
      */
     async addPlayer(userId, username, nickname) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(userId)) {
+            logger.error('Invalid userId provided to addPlayer:', userId);
+            return false;
+        }
+        
+        if (!username || typeof username !== 'string') {
+            logger.error('Invalid username provided to addPlayer:', username);
+            return false;
+        }
+
         return await this.withLock(async () => {
             if (this.players.has(userId)) {
                 return false; // Player already joined
@@ -71,6 +86,12 @@ class GameSession {
      * @returns {Promise<boolean>} - True if player was removed
      */
     async removePlayer(userId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(userId)) {
+            logger.error('Invalid userId provided to removePlayer:', userId);
+            return false;
+        }
+
         return await this.withLock(async () => {
             const removed = this.players.delete(userId);
             if (removed) {
@@ -97,6 +118,12 @@ class GameSession {
      * @returns {boolean}
      */
     isHost(userId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(userId)) {
+            logger.error('Invalid userId provided to isHost:', userId);
+            return false;
+        }
+        
         return this.hostId === userId;
     }
 
@@ -187,9 +214,9 @@ class GameSession {
      * Deduplicate the players array to prevent race condition issues
      */
     deduplicatePlayers() {
-        const uniquePlayers = new Map();
-        for (const [userId, playerData] of this.players) {
-            uniquePlayers.set(userId, playerData);
+        const uniquePlayers = new Set();
+        for (const userId of this.players) {
+            uniquePlayers.add(userId);
         }
         this.players = uniquePlayers;
     }
@@ -218,6 +245,12 @@ class GameSession {
      * @returns {boolean}
      */
     hasPlayer(userId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(userId)) {
+            logger.error('Invalid userId provided to hasPlayer:', userId);
+            return false;
+        }
+        
         return this.players.has(userId);
     }
 
@@ -234,7 +267,7 @@ class GameSession {
      * @returns {boolean}
      */
     isReady() {
-        return this.gameState === 'ready';
+        return this.gameState === 'ready' && this.players.size >= config.MIN_PLAYERS_TO_START;
     }
 
     /**
@@ -266,6 +299,12 @@ class GameSession {
      * @returns {Object|null} Role assignment or null if not found
      */
     getPlayerRole(userId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(userId)) {
+            logger.error('Invalid userId provided to getPlayerRole:', userId);
+            return null;
+        }
+        
         return this.roleAssignments[userId] || null;
     }
 
@@ -307,6 +346,12 @@ class GameSession {
      * @returns {string|null} Username or null if not found
      */
     getPlayerUsername(userId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(userId)) {
+            logger.error('Invalid userId provided to getPlayerUsername:', userId);
+            return null;
+        }
+        
         return this.playerUsernames.get(userId) || null;
     }
 
@@ -316,6 +361,12 @@ class GameSession {
      * @returns {string|null} Nickname or null if not found
      */
     getPlayerNickname(userId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(userId)) {
+            logger.error('Invalid userId provided to getPlayerNickname:', userId);
+            return null;
+        }
+        
         return this.playerNicknames.get(userId) || this.getPlayerUsername(userId) || null;
     }
 
@@ -335,6 +386,17 @@ class GameSession {
      * @returns {boolean} - True if vote was cast successfully
      */
     castVote(voterId, targetId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(voterId)) {
+            logger.error('Invalid voterId provided to castVote:', voterId);
+            return false;
+        }
+        
+        if (!ErrorHandler.isValidDiscordId(targetId)) {
+            logger.error('Invalid targetId provided to castVote:', targetId);
+            return false;
+        }
+
         if (!this.alivePlayers.has(voterId) || !this.alivePlayers.has(targetId)) {
             return false; // Can't vote if dead or vote for dead player
         }
@@ -351,6 +413,12 @@ class GameSession {
      * @returns {boolean} - True if vote was removed
      */
     removeVote(voterId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(voterId)) {
+            logger.error('Invalid voterId provided to removeVote:', voterId);
+            return false;
+        }
+        
         const hadVote = this.votes.delete(voterId);
         const hadSkip = this.skipVotes.delete(voterId);
         return hadVote || hadSkip;
@@ -361,6 +429,12 @@ class GameSession {
      * @param {string} voterId - ID of the player skipping
      */
     addSkipVote(voterId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(voterId)) {
+            logger.error('Invalid voterId provided to addSkipVote:', voterId);
+            return;
+        }
+        
         // Remove any existing vote first
         this.votes.delete(voterId);
         this.skipVotes.add(voterId);
@@ -392,7 +466,7 @@ class GameSession {
             const voterRole = this.getPlayerRole(voterId);
 
             // Mayor gets 4 votes if revealed, otherwise normal vote
-            const voteWeight = (voterRole?.role === 'MAYOR' && this.mayorRevealed) ? 4 : 1;
+            const voteWeight = (voterRole?.role === 'MAYOR' && this.mayorRevealed) ? config.MAYOR_VOTE_MULTIPLIER : 1;
             voteCounts.set(targetId, currentCount + voteWeight);
         }
 
@@ -413,6 +487,12 @@ class GameSession {
      * @returns {boolean} - True if Mayor was revealed successfully
      */
     revealMayor(mayorId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(mayorId)) {
+            logger.error('Invalid mayorId provided to revealMayor:', mayorId);
+            return false;
+        }
+        
         const playerRole = this.getPlayerRole(mayorId);
         if (playerRole?.role === 'MAYOR' && !this.mayorRevealed) {
             this.mayorRevealed = true;
@@ -523,7 +603,7 @@ class GameSession {
             winner: winResult.gameEnded ? winResult : null
         };
         } catch (error) {
-            console.error('Error in processElimination:', error);
+            logger.error('Error in processElimination:', error);
             // Return safe fallback result
             return {
                 eliminated: null,
@@ -645,7 +725,7 @@ class GameSession {
             winType: null
         };
         } catch (error) {
-            console.error('Error in checkWinConditions:', error);
+            logger.error('Error in checkWinConditions:', error);
             // Return safe fallback - game continues
             return {
                 gameEnded: false,
@@ -786,6 +866,12 @@ class GameSession {
      * @returns {boolean} - True if target was set successfully
      */
     setNightKillTarget(targetId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(targetId)) {
+            logger.error('Invalid targetId provided to setNightKillTarget:', targetId);
+            return false;
+        }
+        
         if (!this.alivePlayers.has(targetId)) {
             return false; // Can't kill dead players
         }
@@ -872,6 +958,12 @@ class GameSession {
      * @param {string} executionerId - ID of the Executioner to convert
      */
     convertExecutionerToJester(executionerId) {
+        // Validate input parameters
+        if (!ErrorHandler.isValidDiscordId(executionerId)) {
+            logger.error('Invalid executionerId provided to convertExecutionerToJester:', executionerId);
+            return;
+        }
+        
         if (this.roleAssignments[executionerId]?.role === 'EXECUTIONER') {
             const { getRole } = require('./roles');
             this.roleAssignments[executionerId] = {

@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -130,7 +131,7 @@ module.exports = {
             });
             
         } catch (error) {
-            console.error('Error in endgame command:', error);
+            logger.error('Error in endgame command:', error);
             
             try {
                 await interaction.reply({
@@ -138,7 +139,7 @@ module.exports = {
                     flags: 64 // Ephemeral
                 });
             } catch (replyError) {
-                console.error('Failed to send error reply:', replyError);
+                logger.error('Failed to send error reply:', replyError);
             }
         }
     }

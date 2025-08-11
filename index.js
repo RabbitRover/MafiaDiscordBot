@@ -3,6 +3,7 @@ require('./utils/compatibility');
 
 const { Client, GatewayIntentBits, Collection, REST, Routes, InteractionResponseType } = require('discord.js');
 require('dotenv').config();
+const logger = require('./utils/logger');
 
 // Create a new client instance
 const client = new Client({
@@ -41,7 +42,7 @@ client.on('interactionCreate', async interaction => {
         const command = client.commands.get(interaction.commandName);
 
         if (!command) {
-            console.error(`No command matching ${interaction.commandName} was found.`);
+            logger.error(`No command matching ${interaction.commandName} was found.`);
             return;
         }
 
@@ -53,7 +54,7 @@ client.on('interactionCreate', async interaction => {
                 await command.execute(interaction);
             }
         } catch (error) {
-            console.error('Error executing command:', error);
+            logger.error('Error executing command:', error);
             
             const errorMessage = {
                 content: '❌ There was an error while executing this command!',
@@ -74,7 +75,7 @@ client.on('interactionCreate', async interaction => {
                 await startCommand.handleButtonInteraction(interaction);
             }
         } catch (error) {
-            console.error('Error handling button interaction:', error);
+            logger.error('Error handling button interaction:', error);
             
             const errorMessage = {
                 content: '❌ There was an error while processing your action!',
@@ -92,11 +93,11 @@ client.on('interactionCreate', async interaction => {
 
 // Handle errors
 client.on('error', error => {
-    console.error('Discord client error:', error);
+    logger.error('Discord client error:', error);
 });
 
 process.on('unhandledRejection', error => {
-    console.error('Unhandled promise rejection:', error);
+    logger.error('Unhandled promise rejection:', error);
 });
 
 // Register slash commands with Discord
@@ -122,7 +123,7 @@ async function registerSlashCommands() {
 
         console.log('✅ Successfully reloaded application (/) commands.');
     } catch (error) {
-        console.error('❌ Error registering slash commands:', error);
+        logger.error('❌ Error registering slash commands:', error);
     }
 }
 

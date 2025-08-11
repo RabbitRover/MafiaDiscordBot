@@ -1,6 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 const GameSession = require('../game/GameSession');
 const { assignRoles, createRoleMessage } = require('../game/roles');
+const config = require('../game/config');
+const logger = require('../utils/logger');
 
 // Store active game sessions (in memory for now)
 const activeSessions = new Map();
@@ -31,7 +33,7 @@ async function handleStartCommand(interaction, sessionsMap = activeSessions) {
             components: [row]
         });
     } catch (error) {
-        console.error('Error in handleStartCommand:', error);
+        logger.error('Error in handleStartCommand:', error);
 
         // Clean up session if it was created
         const channelId = interaction.channelId;
@@ -48,7 +50,7 @@ async function handleStartCommand(interaction, sessionsMap = activeSessions) {
                 flags: 64 // Ephemeral
             });
         } catch (replyError) {
-            console.error('Failed to send error reply:', replyError);
+            logger.error('Failed to send error reply:', replyError);
         }
     }
 }
@@ -192,7 +194,7 @@ async function createGameEmbed(gameSession, guild) {
         const hostMember = await guild.members.fetch(gameSession.hostId);
         hostUsername = hostMember.user.username;
     } catch (error) {
-        console.error('Error fetching host member:', error);
+        logger.error('Error fetching host member:', error);
     }
 
     // Create joined players list
@@ -295,7 +297,7 @@ async function sendRoleAssignments(interaction, gameSession) {
     // Set up role distribution collector
     const roleCollector = roleMessage.createMessageComponentCollector({
         componentType: ComponentType.Button,
-        time: 300000 // 5 minutes
+        time: config.ROLE_COLLECTION_TIME // 5 minutes
     });
     gameSession.addCollector(roleCollector);
 
@@ -326,6 +328,7 @@ async function sendRoleAssignments(interaction, gameSession) {
         // Get player's role assignment
         const assignment = gameSession.getPlayerRole(userId);
         if (!assignment) {
+            logger.error('Role assignment error for user:', userId);
             await roleInteraction.reply({
                 content: '❌ Role assignment error!',
                 flags: 64 // Ephemeral
@@ -353,7 +356,7 @@ async function sendRoleAssignments(interaction, gameSession) {
             // Wait a moment then start day phase
             const timeoutId = setTimeout(async () => {
                 await startDayPhase(interaction, gameSession);
-            }, 2000);
+            }, config.ROLE_DISTRIBUTION_DELAY);
             gameSession.addTimeout(timeoutId);
         }
     });
@@ -382,7 +385,7 @@ async function sendRoleAssignments(interaction, gameSession) {
             dayPhaseStarted = true;
             await startDayPhase(interaction, gameSession);
         }
-    }, 5000); // 5 second fallback delay
+    }, config.NIGHT_PHASE_FALLBACK); // 5 second fallback delay
     gameSession.addTimeout(fallbackTimeoutId);
 }
 
@@ -394,7 +397,7 @@ async function sendRoleAssignments(interaction, gameSession) {
 async function startDayPhase(interaction, gameSession) {
     // Prevent multiple day phase starts
     if (gameSession.isDayPhase()) {
-        console.log('Day phase already started, skipping duplicate start');
+        logger.warn('Day phase already started, skipping duplicate start');
         return;
     }
 
@@ -422,7 +425,7 @@ async function startDayPhase(interaction, gameSession) {
 
     const collector = dayMessage.createMessageComponentCollector({
         filter,
-        time: 600000 // 10 minutes
+        time: config.DAY_PHASE_TIME // 10 minutes
     });
 
     // Store collector reference on the message for manual stopping
@@ -520,7 +523,14 @@ async function handleDayPhaseInteraction(interaction, gameSession, dayMessage) {
         await dayMessage.edit({
             embeds: [updatedEmbed],
             components: updatedButtons
-        }).catch(console.error);
+        }).catch(error => {
+            console.error('Failed to update day phase message:', error);
+            // Try to send a follow-up message to inform users
+            interaction.followUp({
+                content: '⚠️ There was an issue updating the voting display, but voting continues.',
+                flags: 64
+            }).catch(console.error);
+        });
     }
 }
 
@@ -618,9 +628,9 @@ function createVoteButtons(gameSession) {
     }
 
     // Split buttons into rows (max 5 per row)
-    for (let i = 0; i < voteButtons.length; i += 5) {
+    for (let i = 0; i < voteButtons.length; i += config.MAX_BUTTONS_PER_ROW) {
         const row = new ActionRowBuilder();
-        row.addComponents(voteButtons.slice(i, i + 5));
+        row.addComponents(voteButtons.slice(i, i + config.MAX_BUTTONS_PER_ROW));
         rows.push(row);
     }
 
@@ -690,7 +700,14 @@ async function processDayPhaseEnd(interaction, gameSession, dayMessage) {
     await dayMessage.edit({
         embeds: [createDayPhaseEmbed(gameSession)],
         components: disabledRows
-    }).catch(console.error);
+    }).catch(error => {
+        console.error('Failed to update day message with disabled buttons:', error);
+        // Try to send a follow-up message to inform users
+        interaction.followUp({
+            content: '⚠️ There was an issue updating the game display, but the game continues.',
+            flags: 64
+        }).catch(console.error);
+    });
 
     // Create elimination result embed
     let resultEmbed;
@@ -771,14 +788,14 @@ async function processDayPhaseEnd(interaction, gameSession, dayMessage) {
         // Remove the game session after a delay to allow players to see results
         setTimeout(() => {
             activeSessions.delete(gameSession.channelId);
-        }, 60000); // 60 seconds
+        }, config.GAME_END_DELAY); // 60 seconds
     } else {
         // Game continues - start night phase after a short delay
         setTimeout(async () => {
             if (!gameSession.hasGameEnded()) {
                 await startNightPhase(interaction, gameSession);
             }
-        }, 5000); // 5 second delay before night phase
+        }, config.NIGHT_PHASE_DELAY); // 5 second delay before night phase
     }
 }
 
@@ -790,7 +807,7 @@ async function processDayPhaseEnd(interaction, gameSession, dayMessage) {
 async function startNightPhase(interaction, gameSession) {
     // Prevent multiple night phase starts
     if (gameSession.isNightPhase()) {
-        console.log('Night phase already started, skipping duplicate start');
+        logger.warn('Night phase already started, skipping duplicate start');
         return;
     }
 
@@ -913,7 +930,7 @@ async function sendMafiaKillOptions(interaction, gameSession, mafiaId) {
                 ));
 
             await processNightPhaseEnd(interaction, gameSession, nightMessage);
-        }, 2000);
+        }, config.NIGHT_PHASE_DELAY);
         gameSession.addTimeout(timeoutId);
 
         collector.stop();
@@ -985,7 +1002,14 @@ async function processNightPhaseEnd(interaction, gameSession, nightMessage) {
     await nightMessage.edit({
         embeds: [endedNightEmbed],
         components: [] // Remove any components
-    }).catch(console.error);
+    }).catch(error => {
+        console.error('Failed to update night message:', error);
+        // Try to send a follow-up message to inform users
+        interaction.followUp({
+            content: '⚠️ There was an issue updating the night phase display, but the game continues.',
+            flags: 64
+        }).catch(console.error);
+    });
 
     // Create night results embed
     let resultEmbed;
@@ -1053,7 +1077,7 @@ async function processNightPhaseEnd(interaction, gameSession, nightMessage) {
                     flags: 64 // Ephemeral - only visible to the mentioned user
                 });
             } catch (error) {
-                console.error('Could not send role change message:', error);
+                logger.error('Could not send role change message:', error);
             }
         }
     }
@@ -1079,7 +1103,7 @@ async function processNightPhaseEnd(interaction, gameSession, nightMessage) {
                 gameSession.incrementDay();
                 await startDayPhase(interaction, gameSession);
             }
-        }, 3000); // 3 second delay before next day
+        }, config.NEXT_DAY_DELAY); // 3 second delay before next day
     }
 }
 
@@ -1173,7 +1197,7 @@ async function skipNightPhase(interaction, gameSession) {
             gameSession.incrementDay();
             await startDayPhase(interaction, gameSession);
         }
-    }, 3000); // 3 second delay before next day
+    }, config.NEXT_DAY_DELAY); // 3 second delay before next day
 }
 
 module.exports = {

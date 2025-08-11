@@ -2,6 +2,8 @@
  * Mafia game role definitions with win conditions and powers
  */
 
+const config = require('./config');
+
 const ROLES = {
     MAYOR: {
         name: 'Mayor',
@@ -101,8 +103,8 @@ function getExecutionerTargetRoles() {
  * @returns {Object} Object mapping player IDs to role assignments
  */
 function assignRoles(playerIds) {
-    if (playerIds.length !== 5) {
-        throw new Error('Exactly 5 players required for role assignment');
+    if (playerIds.length !== config.MAX_PLAYERS) {
+        throw new Error(`Exactly ${config.MAX_PLAYERS} players required for role assignment`);
     }
 
     // Get all available roles
