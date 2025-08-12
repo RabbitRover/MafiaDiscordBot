@@ -563,7 +563,23 @@ class GameSession {
             }
         }
 
-        // Handle tie or no votes
+        // Count skip votes for possible peaceful day end
+        const totalAlive = this.getAlivePlayers().size;
+        const skipCount = this.getSkipVotes().size;
+
+        // Determine if a peaceful day end occurs: skip majority strictly greater than half.
+        // Lynch votes take priority in ties, so only if skipCount > totalAlive/2 do we end peacefully.
+        if (skipCount > Math.floor(totalAlive / 2)) {
+            return {
+                eliminated: null,
+                reason: 'skip_majority',
+                tiedPlayers: [],
+                gameEnded: false,
+                winner: null
+            };
+        }
+
+        // Handle tie or no votes (lynch votes take priority in tie with skip, handled above)
         if (playersWithMaxVotes.length !== 1 || maxVotes === 0) {
             return {
                 eliminated: null,
@@ -720,6 +736,49 @@ class GameSession {
                 winType: 'mafia_eliminated',
                 executionerWin: executionerWin
             };
+        }
+
+        // Check if Mayor was eliminated during day (Mafia wins)
+        if (eliminatedRole.role === 'MAYOR') {
+            const mafiaId = this.getMafiaId();
+            if (mafiaId) {
+                const winners = [{
+                    type: 'Mafia',
+                    playerId: mafiaId,
+                    username: this.getPlayerNickname(mafiaId),
+                    reason: 'Mafia won by having the Mayor lynched'
+                }];
+
+                // Survivor co-wins if alive
+                const survivorId = this.getSurvivorId();
+                if (survivorId && this.alivePlayers.has(survivorId)) {
+                    winners.push({
+                        type: 'Survivor',
+                        playerId: survivorId,
+                        username: this.getPlayerNickname(survivorId),
+                        reason: 'Survivor was alive at game end'
+                    });
+                }
+
+                // Executioner also wins if they previously achieved their goal
+                for (const [playerId, assignment] of Object.entries(this.roleAssignments)) {
+                    if (assignment.role === 'EXECUTIONER' && assignment.hasWon) {
+                        winners.push({
+                            type: 'Executioner',
+                            playerId: playerId,
+                            username: this.getPlayerNickname(playerId),
+                            reason: 'Executioner achieved their goal earlier'
+                        });
+                        break;
+                    }
+                }
+
+                return {
+                    gameEnded: true,
+                    winners,
+                    winType: 'mayor_lynched'
+                };
+            }
         }
 
         // Game continues

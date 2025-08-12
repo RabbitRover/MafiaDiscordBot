@@ -772,11 +772,13 @@ async function processDayPhaseEnd(interaction, gameSession, dayMessage) {
         }
 
     } else {
-        // No elimination (tie or no votes)
-        const reason = eliminationResult.reason === 'tie' ? 'Vote tie' : 'No votes cast';
+        // No elimination (tie, no votes, or skip majority)
+        let reasonText = 'No votes cast';
+        if (eliminationResult.reason === 'tie') reasonText = 'Vote tie';
+        if (eliminationResult.reason === 'skip_majority') reasonText = 'Skip majority';
         resultEmbed = new EmbedBuilder()
             .setTitle('🤝 No Elimination')
-            .setDescription(`${reason} - no one was eliminated today.`)
+            .setDescription(`${reasonText} - no one was eliminated today.`)
             .setColor(0xffaa00)
             .setTimestamp();
 
@@ -889,13 +891,30 @@ async function startNightPhase(interaction, gameSession) {
         )
         .setTimestamp();
 
+    // Add a button to open Mafia night action (only Mafia can use it)
+    const mafiaOpenRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('mafia_open')
+            .setLabel('Open Night Action')
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji('🔪')
+    );
+
     const nightMessage = await interaction.followUp({
         embeds: [nightEmbed],
+        components: [mafiaOpenRow],
         flags: 0 // Public message
     });
 
-    // Send Mafia their kill options via ephemeral message
-    await sendMafiaKillOptions(interaction, gameSession, mafiaId);
+    // Collector for the "Open Night Action" button; only the Mafia can use it
+    const openFilter = (btn) => btn.customId === 'mafia_open' && btn.user.id === mafiaId;
+    const openCollector = nightMessage.createMessageComponentCollector({ filter: openFilter, time: 300000 });
+    gameSession.addCollector(openCollector);
+
+    openCollector.on('collect', async (btnInteraction) => {
+        // Reply with the Mafia's ephemeral kill options
+        await sendMafiaKillOptions(btnInteraction, gameSession, mafiaId);
+    });
 }
 
 /**
@@ -955,8 +974,8 @@ async function sendMafiaKillOptions(interaction, gameSession, mafiaId) {
         .setTimestamp();
 
     // Send ephemeral message to Mafia in channel
-    const mafiaMessage = await interaction.followUp({
-        content: `<@${mafiaId}> **Your night action:**`,
+    const mafiaMessage = await interaction.reply({
+        content: `**Your night action:**`,
         embeds: [mafiaEmbed],
         components: rows,
         flags: 64 // Ephemeral - only visible to the Mafia
