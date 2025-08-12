@@ -78,7 +78,9 @@ async function handleButtonInteraction(interaction) {
             }
 
             const member = await interaction.guild.members.fetch(userId).catch(() => null);
-            const nickname = member ? (member.nickname || member.user.username) : interaction.user.username;
+            const nickname = member
+                ? (member.nickname || member.displayName || member.user.globalName || member.user.username)
+                : ((interaction.member && interaction.member.displayName) || interaction.user.globalName || interaction.user.username);
             const added = await gameSession.addPlayer(userId, interaction.user.username, nickname);
             if (!added) {
                 return await interaction.reply({
@@ -192,8 +194,8 @@ async function createGameEmbed(gameSession, guild) {
     let hostUsername = 'Unknown';
     try {
         const hostMember = await guild.members.fetch(gameSession.hostId);
-        // Prefer server display name
-        hostUsername = hostMember.displayName || hostMember.user.username;
+        // Server Nickname > Display Name > Global Name > Username
+        hostUsername = hostMember.nickname || hostMember.displayName || hostMember.user.globalName || hostMember.user.username;
     } catch (error) {
         logger.error('Error fetching host member:', error);
     }
@@ -480,7 +482,9 @@ async function handleDayPhaseInteraction(interaction, gameSession, dayMessage) {
         // Handle Mayor reveal
         if (gameSession.revealMayor(userId)) {
             const member = await interaction.guild.members.fetch(userId).catch(() => null);
-            const nickname = member ? (member.nickname || member.user.username) : interaction.user.username;
+            const nickname = member
+                ? (member.nickname || member.displayName || member.user.globalName || member.user.username)
+                : ((interaction.member && interaction.member.displayName) || interaction.user.globalName || interaction.user.username);
             await interaction.reply({
                 content: `🏛️ **${nickname}** has revealed as the Mayor! Their votes now count as 4!`,
                 flags: 0 // Public message
