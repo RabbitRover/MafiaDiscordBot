@@ -26,6 +26,9 @@ class GameSession {
         this.nightKillTarget = null; // Player marked for elimination by Mafia
         this.dayNumber = 1; // Track current day number
 
+        // Track the current day phase message for updates
+        this.currentDayMessageId = null;
+
         // Timeout and collector management for cleanup
         this.activeTimeouts = new Set();
         this.activeCollectors = new Set();
@@ -1074,6 +1077,22 @@ class GameSession {
      */
     getPlayers() {
         return new Set(this.players);
+    }
+
+    /**
+     * Store the message ID of the active day phase message
+     * @param {string|null} messageId
+     */
+    setCurrentDayMessageId(messageId) {
+        this.currentDayMessageId = messageId || null;
+    }
+
+    /**
+     * Get the message ID of the active day phase message
+     * @returns {string|null}
+     */
+    getCurrentDayMessageId() {
+        return this.currentDayMessageId;
     }
 }
 
