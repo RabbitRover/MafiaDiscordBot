@@ -404,7 +404,8 @@ class GameSession {
             return false; // Can't vote if dead or vote for dead player
         }
 
-        // Allow self-voting (removed restriction)
+        // Clear any skip vote if present when casting a player vote
+        this.skipVotes.delete(voterId);
 
         this.votes.set(voterId, targetId);
         return true;

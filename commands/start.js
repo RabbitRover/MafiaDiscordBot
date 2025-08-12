@@ -237,13 +237,18 @@ function createButtonRow(gameSession) {
     const row = new ActionRowBuilder();
 
     if (gameSession.isReady()) {
-        // Show start button when ready
+        // When ready (cap filled), allow leaving and host to start
         row.addComponents(
             new ButtonBuilder()
                 .setCustomId('start_game')
                 .setLabel('Start Game')
                 .setStyle(ButtonStyle.Success)
-                .setEmoji('🚀')
+                .setEmoji('🚀'),
+            new ButtonBuilder()
+                .setCustomId('leave_game')
+                .setLabel('Leave Game')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('👋')
         );
     } else {
         // Show join and leave buttons when waiting for players
