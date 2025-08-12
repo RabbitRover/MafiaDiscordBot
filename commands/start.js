@@ -409,6 +409,11 @@ async function startDayPhase(interaction, gameSession) {
         flags: 0 // Public message
     });
 
+    // Track the day message ID for external refreshes
+    if (typeof gameSession.setCurrentDayMessageId === 'function') {
+        gameSession.setCurrentDayMessageId(dayMessage.id);
+    }
+
     // Create collector for voting buttons
     const filter = (buttonInteraction) => {
         const userId = buttonInteraction.user.id;
@@ -764,6 +769,11 @@ async function processDayPhaseEnd(interaction, gameSession, dayMessage) {
         flags: 0 // Public message
     });
 
+    // Clear tracked day message ID since day has ended
+    if (typeof gameSession.setCurrentDayMessageId === 'function') {
+        gameSession.setCurrentDayMessageId(null);
+    }
+
     // If game ended, show final results and clean up
     if (eliminationResult.gameEnded) {
         await announceGameEnd(interaction, gameSession);
@@ -779,6 +789,40 @@ async function processDayPhaseEnd(interaction, gameSession, dayMessage) {
                 await startNightPhase(interaction, gameSession);
             }
         }, 5000); // 5 second delay before night phase
+    }
+}
+
+/**
+ * Refresh the day window message for a channel (called on every message)
+ * @param {import('discord.js').Client} client - Discord client
+ * @param {string} channelId - Channel ID where the game is running
+ * @param {Map} sessionsMap - Optional sessions map (defaults to module activeSessions)
+ */
+async function refreshDayWindow(client, channelId, sessionsMap = activeSessions) {
+    try {
+        const session = sessionsMap.get(channelId);
+        if (!session || !session.isDayPhase || !session.isDayPhase()) return;
+
+        const messageId = typeof session.getCurrentDayMessageId === 'function'
+            ? session.getCurrentDayMessageId()
+            : null;
+        if (!messageId) return;
+
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel || !channel.isTextBased()) return;
+
+        const msg = await channel.messages.fetch(messageId).catch(() => null);
+        if (!msg) return;
+
+        const updatedEmbed = createDayPhaseEmbed(session);
+        const updatedButtons = createVoteButtons(session);
+
+        await msg.edit({
+            embeds: [updatedEmbed],
+            components: updatedButtons
+        }).catch(() => {});
+    } catch (e) {
+        // Swallow to avoid disrupting message flow
     }
 }
 
@@ -1189,5 +1233,6 @@ module.exports = {
     handleButtonInteraction,
     getActiveSessions,
     endSession,
-    activeSessions
+    activeSessions,
+    refreshDayWindow
 };

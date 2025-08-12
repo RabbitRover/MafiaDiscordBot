@@ -90,6 +90,33 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+// Refresh the day window on every new message in channels with active day phase
+client.on('messageCreate', async (message) => {
+    try {
+        // Ignore bot messages
+        if (message.author.bot) return;
+
+        // Only react in guild text channels
+        if (!message.guild || !message.channelId) return;
+
+        // Find session for this channel
+        const channelId = message.channelId;
+        const session = activeSessions.get(channelId);
+        if (!session) return;
+
+        // Only refresh during day phase
+        if (typeof session.isDayPhase === 'function' && session.isDayPhase()) {
+            // Lazy import to avoid cycles
+            const { refreshDayWindow } = require('./commands/start');
+            if (typeof refreshDayWindow === 'function') {
+                await refreshDayWindow(client, channelId, activeSessions);
+            }
+        }
+    } catch (_) {
+        // Do not disrupt normal operation on refresh failure
+    }
+});
+
 // Handle errors
 client.on('error', error => {
     console.error('Discord client error:', error);

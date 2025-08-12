@@ -22,6 +22,9 @@ class GameSession {
         this.nightKillTarget = null; // Player marked for elimination by Mafia
         this.dayNumber = 1; // Track current day number
 
+        // Track the current day phase message for updates
+        this.currentDayMessageId = null;
+
         // Timeout and collector management for cleanup
         this.activeTimeouts = new Set();
         this.activeCollectors = new Set();
@@ -187,9 +190,9 @@ class GameSession {
      * Deduplicate the players array to prevent race condition issues
      */
     deduplicatePlayers() {
-        const uniquePlayers = new Map();
-        for (const [userId, playerData] of this.players) {
-            uniquePlayers.set(userId, playerData);
+        const uniquePlayers = new Set();
+        for (const userId of this.players) {
+            uniquePlayers.add(userId);
         }
         this.players = uniquePlayers;
     }
@@ -982,6 +985,22 @@ class GameSession {
      */
     getPlayers() {
         return new Set(this.players);
+    }
+
+    /**
+     * Store the message ID of the active day phase message
+     * @param {string|null} messageId
+     */
+    setCurrentDayMessageId(messageId) {
+        this.currentDayMessageId = messageId || null;
+    }
+
+    /**
+     * Get the message ID of the active day phase message
+     * @returns {string|null}
+     */
+    getCurrentDayMessageId() {
+        return this.currentDayMessageId;
     }
 }
 
