@@ -192,7 +192,8 @@ async function createGameEmbed(gameSession, guild) {
     let hostUsername = 'Unknown';
     try {
         const hostMember = await guild.members.fetch(gameSession.hostId);
-        hostUsername = hostMember.user.username;
+        // Prefer server display name
+        hostUsername = hostMember.displayName || hostMember.user.username;
     } catch (error) {
         logger.error('Error fetching host member:', error);
     }
@@ -200,8 +201,10 @@ async function createGameEmbed(gameSession, guild) {
     // Create joined players list
     let joinedPlayersList = 'None';
     if (gameSession.getPlayerCount() > 0) {
-        const playerUsernames = gameSession.getPlayerUsernames();
-        joinedPlayersList = playerUsernames.join(', ');
+        // Build from server display names (nicknames)
+        const playerIds = Array.from(gameSession.getPlayers());
+        const displayNames = playerIds.map(id => gameSession.getPlayerNickname(id)).filter(Boolean);
+        joinedPlayersList = displayNames.join(', ');
 
         // Truncate if too long
         if (joinedPlayersList.length > 1000) {
@@ -770,7 +773,7 @@ async function processDayPhaseEnd(interaction, gameSession, dayMessage) {
 
         if (eliminationResult.reason === 'tie' && eliminationResult.tiedPlayers.length > 0) {
             const tiedNames = eliminationResult.tiedPlayers
-                .map(id => gameSession.getPlayerUsername(id))
+                .map(id => gameSession.getPlayerNickname(id))
                 .join(', ');
             resultEmbed.addFields({
                 name: '🤝 Tied Players',

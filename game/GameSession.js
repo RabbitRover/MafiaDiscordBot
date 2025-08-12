@@ -538,7 +538,7 @@ class GameSession {
      * @returns {Array<string>} - Array of alive player usernames
      */
     getAlivePlayerUsernames() {
-        return Array.from(this.alivePlayers).map(id => this.getPlayerUsername(id));
+        return Array.from(this.alivePlayers).map(id => this.getPlayerNickname(id));
     }
 
     /**
@@ -576,7 +576,7 @@ class GameSession {
         // Eliminate the player with most votes
         const eliminatedId = playersWithMaxVotes[0];
         const eliminatedRole = this.getPlayerRole(eliminatedId);
-        const eliminatedUsername = this.getPlayerUsername(eliminatedId);
+        const eliminatedUsername = this.getPlayerNickname(eliminatedId);
 
         this.alivePlayers.delete(eliminatedId);
         this.eliminatedPlayer = {
@@ -913,7 +913,7 @@ class GameSession {
 
         const eliminatedId = this.nightKillTarget;
         const eliminatedRole = this.getPlayerRole(eliminatedId);
-        const eliminatedUsername = this.getPlayerUsername(eliminatedId);
+        const eliminatedUsername = this.getPlayerNickname(eliminatedId);
 
         // Remove player from alive players
         this.alivePlayers.delete(eliminatedId);
